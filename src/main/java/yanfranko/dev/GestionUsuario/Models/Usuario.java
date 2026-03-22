@@ -3,9 +3,12 @@ package yanfranko.dev.GestionUsuario.Models;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Max;
@@ -56,9 +59,13 @@ public class Usuario {
 
     @Column(nullable = false, length = 8, unique = true)
     @NotBlank(message = "El DNI es OBLIGATORIO")
-    @Size(min = 8, max = 8, message = "El DNI debe tener entre 3 y 8 caracteres")
+    @Size(min = 8, max = 8, message = "El DNI debe tener entre 8 caracteres")
     @Pattern(regexp = "\\d{8}", message = "El DNI debe contener solo números y tener exactamente 8 dígitos")
     String dni;
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "role_id", nullable = false)
+    private Role role;
     
     String password;
 }

@@ -4,6 +4,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
@@ -28,6 +29,9 @@ public record UsuarioRequestDTO(
 
     @Pattern(regexp = "\\d{8}", message = "El DNI debe tener 8 dígitos")
     String dni,
+
+    @NotNull(message = "El ID del rol es obligatorio")
+    Long roleId,
 
     @NotBlank(message = "La contraseña es obligatoria")
     @Size(min = 8, message = "La contraseña debe tener al menos 8 caracteres")

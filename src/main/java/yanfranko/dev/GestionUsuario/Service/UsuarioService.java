@@ -8,15 +8,20 @@ import org.springframework.transaction.annotation.Transactional;
 
 import yanfranko.dev.GestionUsuario.DTOs.Usuario.UsuarioRequestDTO;
 import yanfranko.dev.GestionUsuario.DTOs.Usuario.UsuarioResponseDTO;
+import yanfranko.dev.GestionUsuario.Models.Role;
 import yanfranko.dev.GestionUsuario.Models.Usuario;
+import yanfranko.dev.GestionUsuario.Models.Enum.ERole;
+import yanfranko.dev.GestionUsuario.Repository.RolRepository;
 import yanfranko.dev.GestionUsuario.Repository.UsuarioRepository;
 
 @Service
 public class UsuarioService {
     private final UsuarioRepository usuarioRepository;
+    private final RolRepository rolRepository;
 
-    public UsuarioService(UsuarioRepository usuarioRepository) {
+    public UsuarioService(UsuarioRepository usuarioRepository, RolRepository rolRepository) {
         this.usuarioRepository = usuarioRepository;
+        this.rolRepository = rolRepository;
     }
 
     // CREATE
@@ -25,8 +30,12 @@ public class UsuarioService {
         if (usuarioRepository.existsByEmail(dto.email())) {
             throw new RuntimeException("El email ya está registrado");
         }
+        Role role = rolRepository.findById(Long.valueOf(dto.roleId()))
+                .orElseThrow(() -> new RuntimeException("Rol no encontrado con ID: " + dto.roleId() + "no existe"));
+
         Usuario usuario = new Usuario();
         mapDtoToEntity(dto, usuario);
+        usuario.setRole(role);
 
         Usuario usuarioGuardado = usuarioRepository.save(usuario);
         return UsuarioResponseDTO.fromEntity(usuarioGuardado);
@@ -57,18 +66,30 @@ public class UsuarioService {
         return UsuarioResponseDTO.fromEntity(usuario);
     }
 
+    // BUSCAR POR ROL
+    @Transactional(readOnly = true)
+    public List<UsuarioResponseDTO> buscarPorRol(ERole role) { // Recibe el Enum directamente
+    return usuarioRepository.findByRole_eRole(role)
+            .stream()
+            .map(UsuarioResponseDTO::fromEntity)
+            .toList();
+}
+
     // UPDATE
     @Transactional
     public UsuarioResponseDTO actualizarUsuario(Long id, UsuarioRequestDTO dto) {
         Usuario usuarioExistente = usuarioRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("No se puede actualizar, usuario no encontrado"));
-
         // Validar si quiere cambiar el email a uno que ya existe (y no es el suyo)
         if (!usuarioExistente.getEmail().equals(dto.email()) && usuarioRepository.existsByEmail(dto.email())) {
             throw new RuntimeException("El nuevo email ya está en uso por otro usuario");
         }
 
+        Role role = rolRepository.findById(dto.roleId())
+                .orElseThrow(() -> new RuntimeException("Rol no encontrado con ID: " + dto.roleId()));
+
         mapDtoToEntity(dto, usuarioExistente);
+        usuarioExistente.setRole(role);
         Usuario usuarioActualizado = usuarioRepository.save(usuarioExistente);
         return UsuarioResponseDTO.fromEntity(usuarioActualizado);
     }
@@ -95,6 +116,12 @@ public class UsuarioService {
                 case "edad" -> usuario.setEdad((Integer) value);
                 case "telefono" -> usuario.setTelefono((String) value);
                 case "dni" -> usuario.setDni((String) value);
+                case "roleId" -> {
+                    // Map recibe los números como Integer
+                    Role role = rolRepository.findById(Long.valueOf(value.toString()))
+                            .orElseThrow(() -> new RuntimeException("Rol no encontrado"));
+                    usuario.setRole(role);
+                }
                 case "password" -> usuario.setPassword((String) value); // Aquí iría el BCrypt
             }
         });
