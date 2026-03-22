@@ -3,6 +3,7 @@ package yanfranko.dev.GestionUsuario.Service;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,10 +19,12 @@ import yanfranko.dev.GestionUsuario.Repository.UsuarioRepository;
 public class UsuarioService {
     private final UsuarioRepository usuarioRepository;
     private final RolRepository rolRepository;
+    private final PasswordEncoder passwordEncoder;
 
-    public UsuarioService(UsuarioRepository usuarioRepository, RolRepository rolRepository) {
+    public UsuarioService(UsuarioRepository usuarioRepository, RolRepository rolRepository, PasswordEncoder passwordEncoder) {
         this.usuarioRepository = usuarioRepository;
         this.rolRepository = rolRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     // CREATE
@@ -30,8 +33,11 @@ public class UsuarioService {
         if (usuarioRepository.existsByEmail(dto.email())) {
             throw new RuntimeException("El email ya está registrado");
         }
-        Role role = rolRepository.findById(Long.valueOf(dto.roleId()))
-                .orElseThrow(() -> new RuntimeException("Rol no encontrado con ID: " + dto.roleId() + "no existe"));
+
+        // ASIGNACIÓN AUTOMÁTICA: Buscamos el rol 'USER' en la BD
+        // Línea 38 corregida:
+Role role = rolRepository.findByERole(ERole.ROLE_USER) // <-- Nota la E mayúscula
+        .orElseThrow(() -> new RuntimeException("Error: El rol USER no existe en la base de datos."));
 
         Usuario usuario = new Usuario();
         mapDtoToEntity(dto, usuario);
@@ -80,16 +86,19 @@ public class UsuarioService {
     public UsuarioResponseDTO actualizarUsuario(Long id, UsuarioRequestDTO dto) {
         Usuario usuarioExistente = usuarioRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("No se puede actualizar, usuario no encontrado"));
-        // Validar si quiere cambiar el email a uno que ya existe (y no es el suyo)
+
         if (!usuarioExistente.getEmail().equals(dto.email()) && usuarioRepository.existsByEmail(dto.email())) {
             throw new RuntimeException("El nuevo email ya está en uso por otro usuario");
         }
 
-        Role role = rolRepository.findById(dto.roleId())
-                .orElseThrow(() -> new RuntimeException("Rol no encontrado con ID: " + dto.roleId()));
+        // Aquí sí usamos el roleId del DTO porque es una actualización (posiblemente de un Admin)
+        if (dto.roleId() != null) {
+            Role role = rolRepository.findById(dto.roleId())
+                    .orElseThrow(() -> new RuntimeException("Rol no encontrado con ID: " + dto.roleId()));
+            usuarioExistente.setRole(role);
+        }
 
         mapDtoToEntity(dto, usuarioExistente);
-        usuarioExistente.setRole(role);
         Usuario usuarioActualizado = usuarioRepository.save(usuarioExistente);
         return UsuarioResponseDTO.fromEntity(usuarioActualizado);
     }
@@ -97,11 +106,9 @@ public class UsuarioService {
     // PATCH (actualización parcial)
     @Transactional
     public UsuarioResponseDTO actualizarParcial(Long id, Map<String, Object> campos) {
-        // 1. Buscar al usuario o lanzar error
         Usuario usuario = usuarioRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado con ID: " + id));
 
-        // 2. Iterar sobre los campos recibidos y aplicar solo los que existan
         campos.forEach((key, value) -> {
             switch (key) {
                 case "nombre" -> usuario.setNombre((String) value);
@@ -117,16 +124,14 @@ public class UsuarioService {
                 case "telefono" -> usuario.setTelefono((String) value);
                 case "dni" -> usuario.setDni((String) value);
                 case "roleId" -> {
-                    // Map recibe los números como Integer
                     Role role = rolRepository.findById(Long.valueOf(value.toString()))
                             .orElseThrow(() -> new RuntimeException("Rol no encontrado"));
                     usuario.setRole(role);
                 }
-                case "password" -> usuario.setPassword((String) value); // Aquí iría el BCrypt
+                case "password" -> usuario.setPassword(passwordEncoder.encode((String) value));
             }
         });
 
-        // 3. Guardar cambios y devolver la respuesta
         return UsuarioResponseDTO.fromEntity(usuarioRepository.save(usuario));
     }
 
@@ -198,6 +203,6 @@ public class UsuarioService {
         usuario.setEdad(dto.edad());
         usuario.setTelefono(dto.telefono());
         usuario.setDni(dto.dni());
-        usuario.setPassword(dto.password()); // Recuerda: ¡aquí debería ir BCrypt!
+        usuario.setPassword(passwordEncoder.encode(dto.password()));
     }
 }
