@@ -19,6 +19,17 @@ target/
 *.iml
 *.ipr
 
+
+# Environment variables (secrets)
+.env
+.env.*
+*.env
+
+# Local scripts with secrets
+env.sh
+secrets.sh
+
+
 ### NetBeans ###
 /nbproject/private/
 /nbbuild/

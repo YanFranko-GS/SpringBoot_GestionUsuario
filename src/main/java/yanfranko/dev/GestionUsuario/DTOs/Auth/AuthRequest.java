@@ -7,6 +7,20 @@ public record AuthRequest(
     String password
 ) 
 {}
+ 
 
+ 
+   
+
+
+ 
+  
+   
     
-
+     
+      
+       
+        
+         
+           
+             

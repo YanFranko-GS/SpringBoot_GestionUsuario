@@ -4,6 +4,9 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,7 +24,8 @@ public class UsuarioService {
     private final RolRepository rolRepository;
     private final PasswordEncoder passwordEncoder;
 
-    public UsuarioService(UsuarioRepository usuarioRepository, RolRepository rolRepository, PasswordEncoder passwordEncoder) {
+    public UsuarioService(UsuarioRepository usuarioRepository, RolRepository rolRepository,
+            PasswordEncoder passwordEncoder) {
         this.usuarioRepository = usuarioRepository;
         this.rolRepository = rolRepository;
         this.passwordEncoder = passwordEncoder;
@@ -36,8 +40,8 @@ public class UsuarioService {
 
         // ASIGNACIÓN AUTOMÁTICA: Buscamos el rol 'USER' en la BD
         // Línea 38 corregida:
-Role role = rolRepository.findByERole(ERole.ROLE_USER) // <-- Nota la E mayúscula
-        .orElseThrow(() -> new RuntimeException("Error: El rol USER no existe en la base de datos."));
+        Role role = rolRepository.findByERole(ERole.ROLE_USER) // <-- Nota la E mayúscula
+                .orElseThrow(() -> new RuntimeException("Error: El rol USER no existe en la base de datos."));
 
         Usuario usuario = new Usuario();
         mapDtoToEntity(dto, usuario);
@@ -75,11 +79,11 @@ Role role = rolRepository.findByERole(ERole.ROLE_USER) // <-- Nota la E mayúscu
     // BUSCAR POR ROL
     @Transactional(readOnly = true)
     public List<UsuarioResponseDTO> buscarPorRol(ERole role) { // Recibe el Enum directamente
-    return usuarioRepository.findByRole_eRole(role)
-            .stream()
-            .map(UsuarioResponseDTO::fromEntity)
-            .toList();
-}
+        return usuarioRepository.findByRole_eRole(role)
+                .stream()
+                .map(UsuarioResponseDTO::fromEntity)
+                .toList();
+    }
 
     // UPDATE
     @Transactional
@@ -91,7 +95,8 @@ Role role = rolRepository.findByERole(ERole.ROLE_USER) // <-- Nota la E mayúscu
             throw new RuntimeException("El nuevo email ya está en uso por otro usuario");
         }
 
-        // Aquí sí usamos el roleId del DTO porque es una actualización (posiblemente de un Admin)
+        // Aquí sí usamos el roleId del DTO porque es una actualización (posiblemente de
+        // un Admin)
         if (dto.roleId() != null) {
             Role role = rolRepository.findById(dto.roleId())
                     .orElseThrow(() -> new RuntimeException("Rol no encontrado con ID: " + dto.roleId()));
@@ -104,33 +109,84 @@ Role role = rolRepository.findByERole(ERole.ROLE_USER) // <-- Nota la E mayúscu
     }
 
     // PATCH (actualización parcial)
+    // esto es opcional pero es una buena práctica para no tener que enviar todos
+    // los campos en una actualización, solo los que queremos cambiar
     @Transactional
     public UsuarioResponseDTO actualizarParcial(Long id, Map<String, Object> campos) {
         Usuario usuario = usuarioRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado con ID: " + id));
+        for (Map.Entry<String, Object> entry : campos.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
 
-        campos.forEach((key, value) -> {
             switch (key) {
-                case "nombre" -> usuario.setNombre((String) value);
-                case "apellido" -> usuario.setApellido((String) value);
+                case "nombre" -> {
+                    String nombre = toStringSafe(value);
+                    if (nombre == null || nombre.length() < 3 || nombre.length() > 50) {
+                        throw new IllegalArgumentException("Nombre inválido");
+                    }
+                    usuario.setNombre(nombre);
+                }
+                case "apellido" -> {
+                    String apellido = toStringSafe(value);
+                    if (apellido == null || apellido.length() < 3 || apellido.length() > 50) {
+                        throw new IllegalArgumentException("Apellido inválido");
+                    }
+                    usuario.setApellido(apellido);
+                }
                 case "email" -> {
-                    String nuevoEmail = (String) value;
+                    String nuevoEmail = toStringSafe(value);
+                    if (nuevoEmail == null)
+                        throw new IllegalArgumentException("Email inválido");
                     if (!usuario.getEmail().equals(nuevoEmail) && usuarioRepository.existsByEmail(nuevoEmail)) {
                         throw new RuntimeException("El email ya está en uso");
                     }
                     usuario.setEmail(nuevoEmail);
                 }
-                case "edad" -> usuario.setEdad((Integer) value);
-                case "telefono" -> usuario.setTelefono((String) value);
-                case "dni" -> usuario.setDni((String) value);
+                case "edad" -> {
+                    Integer edad = toInteger(value);
+                    if (edad == null || edad < 0 || edad > 120)
+                        throw new IllegalArgumentException("Edad inválida");
+                    usuario.setEdad(edad);
+                }
+                case "telefono" -> {
+                    String telefono = toStringSafe(value);
+                    if (telefono == null || telefono.length() > 15)
+                        throw new IllegalArgumentException("Teléfono inválido");
+                    usuario.setTelefono(telefono);
+                }
+                case "dni" -> {
+                    String dni = toStringSafe(value);
+                    if (dni == null || !dni.matches("\\d{8}"))
+                        throw new IllegalArgumentException("DNI inválido");
+                    usuario.setDni(dni);
+                }
                 case "roleId" -> {
-                    Role role = rolRepository.findById(Long.valueOf(value.toString()))
+                    // Solo ADMIN puede cambiar roles
+                    Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+                    boolean isAdmin = auth != null && auth.getAuthorities().stream()
+                            .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+                    if (!isAdmin)
+                        throw new AccessDeniedException("Solo administradores pueden cambiar roles");
+
+                    Long roleId = toLong(value);
+                    if (roleId == null)
+                        throw new IllegalArgumentException("roleId inválido");
+                    Role role = rolRepository.findById(roleId)
                             .orElseThrow(() -> new RuntimeException("Rol no encontrado"));
                     usuario.setRole(role);
                 }
-                case "password" -> usuario.setPassword(passwordEncoder.encode((String) value));
+                case "password" -> {
+                    String pass = toStringSafe(value);
+                    if (pass == null || pass.length() < 8)
+                        throw new IllegalArgumentException("La contraseña debe tener al menos 8 caracteres");
+                    usuario.setPassword(passwordEncoder.encode(pass));
+                }
+                default -> {
+                    // Ignorar campos desconocidos para evitar errores
+                }
             }
-        });
+        }
 
         return UsuarioResponseDTO.fromEntity(usuarioRepository.save(usuario));
     }
@@ -193,8 +249,10 @@ Role role = rolRepository.findByERole(ERole.ROLE_USER) // <-- Nota la E mayúscu
     // usuario, lo que nos permite mantener un código más limpio y fácil de mantener
     // a largo plazo.
 
-    // ojo si quieres implementar otro atributo ejemplo: "direccion" tienes que añadir 
-    // en el model y en el UsuarioRequestDTO y luego agregarlo en este método para que se mapee correctament
+    // ojo si quieres implementar otro atributo ejemplo: "direccion" tienes que
+    // añadir
+    // en el model y en el UsuarioRequestDTO y luego agregarlo en este método para
+    // que se mapee correctament
     // Método privado auxiliar para evitar repetir los "setters"
     private void mapDtoToEntity(UsuarioRequestDTO dto, Usuario usuario) {
         usuario.setNombre(dto.nombre());
@@ -204,5 +262,36 @@ Role role = rolRepository.findByERole(ERole.ROLE_USER) // <-- Nota la E mayúscu
         usuario.setTelefono(dto.telefono());
         usuario.setDni(dto.dni());
         usuario.setPassword(passwordEncoder.encode(dto.password()));
+    }
+
+    // Helpers para conversiones seguras desde Map<String,Object>
+    private Integer toInteger(Object value) {
+        if (value == null)
+            return null;
+        if (value instanceof Number)
+            return ((Number) value).intValue();
+        try {
+            return Integer.parseInt(value.toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private Long toLong(Object value) {
+        if (value == null)
+            return null;
+        if (value instanceof Number)
+            return ((Number) value).longValue();
+        try {
+            return Long.parseLong(value.toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String toStringSafe(Object value) {
+        if (value == null)
+            return null;
+        return value.toString().trim();
     }
 }
