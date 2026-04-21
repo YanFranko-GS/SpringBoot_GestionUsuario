@@ -7,6 +7,7 @@ package yanfranko.dev.GestionUsuario.DTOs.Auth;
 
 //esto me botara si el login es correcto, el token y un mensaje de bienvenida
 public record AuthResponse(
-    String token,
-    String mensaje
-) {}
+        String token,
+        String refreshToken,
+        String mensaje) {
+}

@@ -1,7 +1,5 @@
 package yanfranko.dev.GestionUsuario.Config;
 
-
-
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -36,29 +34,30 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
-            .csrf(AbstractHttpConfigurer::disable) // Deshabilita CSRF de forma moderna
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests(auth -> auth
-                // 1. Permisos Públicos
-                .requestMatchers("/api/v1/auth/**", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
+                .csrf(AbstractHttpConfigurer::disable) // Deshabilita CSRF de forma moderna
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(auth -> auth
+                        // 1. Permisos Públicos
+                        .requestMatchers("/api/v1/auth/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html",
+                                "/swagger-resources/**", "/webjars/**")
+                        .permitAll()
 
-                // 2. Control de Acceso por Roles (RBAC)
-                // Solo el ADMIN puede borrar
-                .requestMatchers(HttpMethod.DELETE, "/api/v1/usuarios/**").hasRole("ADMIN")
-                
-                // ADMIN y MODERATOR pueden crear/editar
-                .requestMatchers(HttpMethod.POST, "/api/v1/usuarios/**").hasAnyRole("ADMIN", "MODERATOR")
-                .requestMatchers(HttpMethod.PUT, "/api/v1/usuarios/**").hasAnyRole("ADMIN", "MODERATOR")
-                .requestMatchers(HttpMethod.PATCH, "/api/v1/usuarios/**").hasAnyRole("ADMIN", "MODERATOR")
+                        // 2. Control de Acceso por Roles (RBAC)
+                        // Solo el ADMIN puede borrar
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/usuarios/**").hasRole("ADMIN")
 
-                // Cualquier rol autenticado puede ver la lista
-                .requestMatchers(HttpMethod.GET, "/api/v1/usuarios/**").hasAnyRole("USER", "ADMIN", "MODERATOR")
+                        // ADMIN y MODERATOR pueden crear/editar
+                        .requestMatchers(HttpMethod.POST, "/api/v1/usuarios/**").hasAnyRole("ADMIN", "MODERATOR")
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/usuarios/**").hasAnyRole("ADMIN", "MODERATOR")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/usuarios/**").hasAnyRole("ADMIN", "MODERATOR")
 
-                .anyRequest().authenticated()
-            )
-            .authenticationProvider(authenticationProvider())
-            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
-            .build();
+                        // Cualquier rol autenticado puede ver la lista
+                        .requestMatchers(HttpMethod.GET, "/api/v1/usuarios/**").hasAnyRole("USER", "ADMIN", "MODERATOR")
+
+                        .anyRequest().authenticated())
+                .authenticationProvider(authenticationProvider())
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                .build();
     }
 
     @Bean

@@ -39,7 +39,8 @@ public class AuthService {
 
         // 2. Devolvemos la respuesta SIN TOKEN
         return new AuthResponse(
-                null, // <--- Enviamos el token como null o vacío
+                null, // access token
+                null, // refresh token
                 "Registro exitoso. Por favor, inicia sesión para continuar.");
     }
 
@@ -56,12 +57,35 @@ public class AuthService {
 
         Usuario usuario = maybeUser.get();
 
-        // 2. Generar el Token
-        String token = jwtService.generarToken(usuario);
+        // 2. Generar los Tokens
+        String accessToken = jwtService.generarAccessToken(usuario);
+        String refreshToken = jwtService.generarRefreshToken(usuario);
 
         // 3. Devolver respuesta
         return new AuthResponse(
-                token,
+                accessToken,
+                refreshToken,
                 "¡Login exitoso! Bienvenido de nuevo.");
+    }
+
+    /**
+     * Refresh Token: Valida el refresh token y genera un nuevo access token con
+     * roles frescos.
+     */
+    public AuthResponse refreshToken(String refreshToken) {
+        String email = jwtService.extractUsername(refreshToken);
+        if (email == null || !jwtService.esTokenValido(refreshToken, email)) {
+            throw new InvalidCredentialsException("Refresh token inválido");
+        }
+
+        Usuario usuario = usuarioRepository.findByEmail(email)
+                .orElseThrow(() -> new InvalidCredentialsException("Usuario no encontrado"));
+
+        String newAccessToken = jwtService.generarAccessToken(usuario);
+
+        return new AuthResponse(
+                newAccessToken,
+                refreshToken, // reutilizar el mismo refresh token o generar nuevo
+                "Token refrescado exitosamente.");
     }
 }

@@ -5,14 +5,16 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -51,14 +53,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            // CARGAMOS AL USUARIO CON SUS ROLES REALES
-            UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
+            // EXTRAEMOS LOS ROLES DEL ACCESS TOKEN
+            List<String> roles = jwtService.extractRoles(jwt);
 
-            if (jwtService.esTokenValido(jwt, userDetails.getUsername())) {
+            if (roles != null && jwtService.esTokenValido(jwt, userEmail)) {
                 UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        userDetails,
+                        userEmail,
                         null,
-                        userDetails.getAuthorities());
+                        roles.stream().map(SimpleGrantedAuthority::new).collect(Collectors.toList()));
                 authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authToken);
             }

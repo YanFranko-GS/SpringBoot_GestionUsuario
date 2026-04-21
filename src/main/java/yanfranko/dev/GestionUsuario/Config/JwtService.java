@@ -13,6 +13,7 @@ import javax.crypto.SecretKey;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.List;
 import java.util.function.Function;
 
 @Service
@@ -20,28 +21,42 @@ public class JwtService {
 
     private final String SECRET_KEY;
 
-    private final long EXPIRATION_TIME = 1000L * 60 * 60 * 24; // 24 horas
+    private final long ACCESS_EXPIRATION_TIME = 1000L * 60 * 15; // 15 minutos
+    private final long REFRESH_EXPIRATION_TIME = 1000L * 60 * 60 * 24 * 7; // 7 días
 
     public JwtService(@Value("${jwt.secret:}") String secret) {
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException("JWT secret must be configured via JWT_SECRET environment variable");
+        }
         this.SECRET_KEY = secret;
     }
 
-    public String generarToken(Usuario usuario) {
-
-    if (SECRET_KEY == null || SECRET_KEY.isBlank()) {
-        throw new IllegalStateException("JWT Secret not configured");
+    public String generarAccessToken(Usuario usuario) {
+        return Jwts.builder()
+                .subject(usuario.getEmail())
+                .claim("roles", List.of(usuario.getRole().getERole().name()))
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + ACCESS_EXPIRATION_TIME))
+                .signWith(getSigningKey())
+                .compact();
     }
 
-    return Jwts.builder()
-            .subject(usuario.getEmail()) 
-            .issuedAt(new Date())       
-            .expiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
-            .signWith(getSigningKey())   
-            .compact();
-}
+    public String generarRefreshToken(Usuario usuario) {
+        return Jwts.builder()
+                .subject(usuario.getEmail())
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + REFRESH_EXPIRATION_TIME))
+                .signWith(getSigningKey())
+                .compact();
+    }
 
     public String extractUsername(String token) {
         return extraerClaim(token, Claims::getSubject);
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<String> extractRoles(String token) {
+        return extraerClaim(token, claims -> (List<String>) claims.get("roles"));
     }
 
     // valida el token
@@ -58,24 +73,21 @@ public class JwtService {
     }
 
     public <T> T extraerClaim(String token, Function<Claims, T> claimsResolver) {
-    try {
-        Claims claims = Jwts.parser()
-                .verifyWith(getSigningKey())   // ✔️ reemplaza setSigningKey
-                .build()
-                .parseSignedClaims(token)      // ✔️ reemplaza parseClaimsJws
-                .getPayload();                 // ✔️ reemplaza getBody()
+        try {
+            Claims claims = Jwts.parser()
+                    .verifyWith(getSigningKey())
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
 
-        return claimsResolver.apply(claims);
+            return claimsResolver.apply(claims);
 
-    } catch (JwtException | IllegalArgumentException e) {
-        return null;
+        } catch (JwtException | IllegalArgumentException e) {
+            return null;
+        }
     }
-}
 
     private SecretKey getSigningKey() {
-        if (SECRET_KEY == null || SECRET_KEY.isBlank()) {
-            throw new IllegalStateException("JWT secret not configured");
-        }
         return Keys.hmacShaKeyFor(SECRET_KEY.getBytes(StandardCharsets.UTF_8));
     }
 }

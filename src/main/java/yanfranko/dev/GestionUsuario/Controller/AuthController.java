@@ -11,8 +11,8 @@ import org.springframework.web.bind.annotation.RestController;
 import yanfranko.dev.GestionUsuario.Config.AuthService;
 import yanfranko.dev.GestionUsuario.DTOs.Auth.AuthRequest;
 import yanfranko.dev.GestionUsuario.DTOs.Auth.AuthResponse;
+import yanfranko.dev.GestionUsuario.DTOs.Auth.RefreshRequest;
 import yanfranko.dev.GestionUsuario.DTOs.Usuario.UsuarioRequestDTO;
-
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -25,7 +25,7 @@ public class AuthController {
     }
 
     /**
-     * Registro de nuevos usuarios. 
+     * Registro de nuevos usuarios.
      * No devuelve Token, obliga al usuario a loguearse después.
      */
     @PostMapping("/register")
@@ -34,11 +34,21 @@ public class AuthController {
     }
 
     /**
-     * Inicio de sesión. 
+     * Inicio de sesión.
      * Verifica credenciales y entrega el JWT (Token).
      */
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@RequestBody @Valid AuthRequest request) {
         return ResponseEntity.ok(authService.login(request));
+    }
+
+    /**
+     * Refresh Token.
+     * Valida el refresh token y devuelve un nuevo access token con roles
+     * actualizados.
+     */
+    @PostMapping("/refresh")
+    public ResponseEntity<AuthResponse> refresh(@RequestBody RefreshRequest request) {
+        return ResponseEntity.ok(authService.refreshToken(request.refreshToken()));
     }
 }
